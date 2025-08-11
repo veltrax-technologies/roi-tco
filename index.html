@@ -1,0 +1,265 @@
+<!--
+  Veltrax — ROI & TCO Slider (Simulator #1)
+  Single-file GitHub Page · No deps · Responsive
+  Goal: quantify daily/annual savings, payback period, ROI multiple
+  Controls: product preset, events/day, inference rate, vendors eliminated,
+            vendor daily cost, local daily cost, uplift %, egress/ETL daily cost,
+            one-time implementation cost.
+  Notes: conservative defaults per product; numbers are illustrative.
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Veltrax — ROI & TCO Simulator</title>
+    <style>
+      :root{
+        --vx-primary:#4c8dff; --vx-bg:#131417; --vx-surface:#1b1d23; --vx-surface-2:#20232b;
+        --vx-border:#2c2f36; --vx-text:#e6e7eb; --vx-muted:#7f8696; --vx-good:#4cff88; --vx-danger:#ff453a; --vx-ring:rgba(76,141,255,.45);
+      }
+      *,*::before,*::after{box-sizing:border-box}
+      html,body{height:100%}
+      body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,"Helvetica Neue",Arial;color:var(--vx-text);background:radial-gradient(1000px 400px at 50% -200px, rgba(111,66,193,.25), transparent 60%), var(--vx-bg)}
+      a{color:var(--vx-primary);text-decoration:none}
+      a:hover{text-decoration:underline}
+      .container{max-width:1200px;margin:0 auto;padding:0 24px}
+      .card{background:linear-gradient(180deg,var(--vx-surface),var(--vx-surface-2));border:1px solid var(--vx-border);border-radius:16px;padding:20px;box-shadow:0 1px 0 rgba(0,0,0,.25)}
+      .muted{color:var(--vx-muted)}
+      .hero{padding:32px 0 12px}
+      .hero h1{margin:8px 0 6px;font-size:36px;line-height:1.15}
+      .pill{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--vx-border);padding:6px 10px;border-radius:999px;background:#181a21;cursor:pointer}
+      .pill.active{border-color:var(--vx-primary);box-shadow:0 0 0 3px var(--vx-ring)}
+      .grid{display:grid;gap:16px}
+      @media (min-width:1000px){.grid.cols-2{grid-template-columns:1fr 1fr}}
+      .row{display:grid;gap:12px}
+      @media (min-width:700px){.row.cols-2{grid-template-columns:1fr 1fr}}
+      label small{color:var(--vx-muted)}
+      input[type="range"]{width:100%}
+      input[type="number"]{width:110px;background:#151821;border:1px solid var(--vx-border);border-radius:10px;color:var(--vx-text);padding:8px}
+      .kpi-grid{display:grid;gap:12px}
+      @media (min-width:900px){.kpi-grid{grid-template-columns:repeat(4,1fr)}}
+      .kpi{background:#16181f;border:1px solid var(--vx-border);border-radius:12px;padding:14px}
+      .kpi .label{font-size:12px;color:var(--vx-muted);margin-bottom:6px}
+      .kpi .value{font-size:20px;font-weight:600}
+      .stack{display:grid;gap:16px}
+      @media (min-width:1100px){.stack{grid-template-columns:1.15fr .85fr}}
+      .chart{height:260px;border:1px solid var(--vx-border);border-radius:14px;position:relative;background:#0f1219}
+      .legend{display:flex;gap:10px;position:absolute;bottom:12px;left:12px;font-size:12px;color:var(--vx-muted)}
+      .dot{display:inline-block;width:10px;height:10px;border-radius:50%}
+      .dot.c1{background:var(--vx-danger)}
+      .dot.c2{background:var(--vx-primary)}
+      .dot.c3{background:var(--vx-good)}
+      .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+      footer{border-top:1px solid var(--vx-border);margin-top:32px;padding:20px 0 48px}
+    </style>
+  </head>
+  <body>
+    <header class="container hero">
+      <div style="display:flex;align-items:center;gap:10px">
+        <svg width="22" height="22" viewBox="0 0 64 64" aria-hidden="true"><rect x="6" y="10" width="52" height="12" rx="6" fill="#fff"/><rect x="6" y="30" width="42" height="12" rx="6" fill="#fff"/><rect x="6" y="50" width="26" height="8" rx="4" fill="#6F42C1"/></svg>
+        <span class="muted" style="letter-spacing:.2em;font-size:11px">VELTRAX</span>
+      </div>
+      <h1>ROI & TCO Simulator — What Veltrax Saves</h1>
+      <p class="muted">Adjust the sliders to estimate savings from consolidating vendors and making faster, unified decisions on your data.</p>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <span class="muted" style="font-size:12px">Preset:</span>
+        <button class="pill" data-preset="finex">Finex (Banking)</button>
+        <button class="pill" data-preset="echelon">Échelon (Retail)</button>
+        <button class="pill" data-preset="verdict">Verdict (Legal)</button>
+      </div>
+    </header>
+
+    <main class="container stack">
+      <!-- Controls -->
+      <section class="card">
+        <h2 style="margin:0 0 10px;font-size:18px">Assumptions</h2>
+        <div class="row cols-2">
+          <div>
+            <label class="mono">Events per day (<span id="out-events">1,000,000</span>)<br><small>Transactions / updates entering the platform</small></label>
+            <input id="in-events" type="range" min="100000" max="5000000" step="10000" value="1000000" />
+          </div>
+          <div>
+            <label class="mono">% of events analyzed by AI (<span id="out-analy">60%</span>)<br><small>Share of events that benefit from model-driven decisions</small></label>
+            <input id="in-analy" type="range" min="10" max="100" step="1" value="60" />
+          </div>
+          <div>
+            <label class="mono">Vendors eliminated (<span id="out-vendors">2</span>)<br><small>Major cloud/SaaS silos retired</small></label>
+            <input id="in-vendors" type="range" min="0" max="6" step="1" value="2" />
+          </div>
+          <div>
+            <label class="mono">Daily cost per vendor ($)<br><small>Subscription + egress + managed ETL</small></label><br>
+            <input id="in-vendorDaily" type="number" min="0" step="100" value="3500" />
+          </div>
+          <div>
+            <label class="mono">Local infra daily cost ($)<br><small>Servers + storage + ops (Veltrax)</small></label><br>
+            <input id="in-localDaily" type="number" min="0" step="50" value="900" />
+          </div>
+          <div>
+            <label class="mono">Unified decision uplift (<span id="out-uplift">25%</span>)<br><small>Average added value per analyzed event from real‑time, holistic AI</small></label>
+            <input id="in-uplift" type="range" min="5" max="40" step="1" value="25" />
+          </div>
+          <div>
+            <label class="mono">Baseline value per event ($)<br><small>Profit / avoided loss before Veltrax</small></label><br>
+            <input id="in-baseVal" type="number" min="0" step="0.01" value="0.08" />
+          </div>
+          <div>
+            <label class="mono">Daily egress & duplicate ETL cost ($)<br><small>Costs avoided by unifying locally</small></label><br>
+            <input id="in-egress" type="number" min="0" step="50" value="1500" />
+          </div>
+          <div>
+            <label class="mono">One‑time implementation cost ($)<br><small>Software + integration</small></label><br>
+            <input id="in-onetime" type="number" min="0" step="1000" value="180000" />
+          </div>
+        </div>
+        <p class="muted" style="margin-top:10px;font-size:12px">All values are illustrative and conservative. Use your real figures to tailor the model.</p>
+      </section>
+
+      <!-- Results -->
+      <section class="card">
+        <h2 style="margin:0 0 10px;font-size:18px">Results</h2>
+        <div class="kpi-grid">
+          <div class="kpi"><div class="label">Daily savings</div><div id="k-daily" class="value mono">—</div></div>
+          <div class="kpi"><div class="label">Annual savings</div><div id="k-annual" class="value mono">—</div></div>
+          <div class="kpi"><div class="label">Payback period</div><div id="k-payback" class="value mono">—</div></div>
+          <div class="kpi"><div class="label">ROI multiple (annual / one‑time)</div><div id="k-roi" class="value mono">—</div></div>
+        </div>
+        <div class="chart" style="margin-top:14px">
+          <svg id="chart" width="100%" height="100%" viewBox="0 0 800 260" preserveAspectRatio="none"></svg>
+          <div class="legend">
+            <span><i class="dot c1"></i> Cloud baseline cost</span>
+            <span><i class="dot c2"></i> Veltrax cost</span>
+            <span><i class="dot c3"></i> Savings (uplift + vendor + egress)</span>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="container" style="display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:10px">
+          <svg width="22" height="22" viewBox="0 0 64 64" aria-hidden="true"><rect x="6" y="10" width="52" height="12" rx="6" fill="#fff"/><rect x="6" y="30" width="42" height="12" rx="6" fill="#fff"/><rect x="6" y="50" width="26" height="8" rx="4" fill="#6F42C1"/></svg>
+          <span class="muted" style="letter-spacing:.2em;font-size:11px">VELTRAX</span>
+        </div>
+        <div class="muted">Local‑first. Private by default. Built for operators who need provable ROI.</div>
+      </div>
+    </footer>
+
+    <script>
+      // Product presets — conservative defaults
+      const PRESETS = {
+        finex:{ name:'Finex (Banking)', vendorDaily:3500, localDaily:900, uplift:25, baseVal:0.08, egress:1500, onetime:180000, events:1000000, analy:60 },
+        echelon:{ name:'Échelon (Retail)', vendorDaily:3000, localDaily:800, uplift:20, baseVal:0.06, egress:1100, onetime:150000, events:800000, analy:55 },
+        verdict:{ name:'Verdict (Legal)', vendorDaily:2000, localDaily:500, uplift:15, baseVal:0.04, egress:700, onetime:120000, events:400000, analy:45 }
+      };
+
+      const $ = s=>document.querySelector(s); const $$ = s=>Array.from(document.querySelectorAll(s));
+      const money = n=>n.toLocaleString(undefined,{style:'currency',currency:'USD',maximumFractionDigits:0});
+      const fmt = n=>n.toLocaleString();
+
+      // Bind preset pills
+      $$('.pill').forEach(btn=>btn.addEventListener('click',()=>applyPreset(btn.dataset.preset)));
+
+      function applyPreset(key){
+        const p = PRESETS[key];
+        $$('.pill').forEach(x=>x.classList.toggle('active', x.dataset.preset===key));
+        $('#in-vendorDaily').value = p.vendorDaily;
+        $('#in-localDaily').value = p.localDaily;
+        $('#in-uplift').value = p.uplift; $('#out-uplift').textContent = p.uplift+'%';
+        $('#in-baseVal').value = p.baseVal;
+        $('#in-egress').value = p.egress;
+        $('#in-onetime').value = p.onetime;
+        $('#in-events').value = p.events; $('#out-events').textContent = fmt(p.events);
+        $('#in-analy').value = p.analy; $('#out-analy').textContent = p.analy+'%';
+        $('#in-vendors').value = 2; $('#out-vendors').textContent = '2';
+        recalc();
+      }
+
+      // Controls → outputs
+      ['in-events','in-analy','in-vendors','in-uplift'].forEach(id=>{
+        $('#'+id).addEventListener('input',()=>{
+          if(id==='in-events') $('#out-events').textContent = fmt(parseInt($('#in-events').value));
+          if(id==='in-analy') $('#out-analy').textContent = $('#in-analy').value+'%';
+          if(id==='in-vendors') $('#out-vendors').textContent = $('#in-vendors').value;
+          if(id==='in-uplift') $('#out-uplift').textContent = $('#in-uplift').value+'%';
+          recalc();
+        });
+      });
+      ['in-vendorDaily','in-localDaily','in-baseVal','in-egress','in-onetime'].forEach(id=>$('#'+id).addEventListener('input', recalc));
+
+      function recalc(){
+        const events = parseInt($('#in-events').value);
+        const analyRate = parseFloat($('#in-analy').value)/100;
+        const vendors = parseInt($('#in-vendors').value);
+        const vendorDaily = parseFloat($('#in-vendorDaily').value||0);
+        const localDaily = parseFloat($('#in-localDaily').value||0);
+        const upliftPct = parseFloat($('#in-uplift').value)/100;
+        const baseVal = parseFloat($('#in-baseVal').value||0);
+        const egress = parseFloat($('#in-egress').value||0);
+        const onetime = parseFloat($('#in-onetime').value||0);
+
+        const analyzed = events * analyRate;
+        const upliftValue = analyzed * baseVal * upliftPct; // $/day from better decisions
+        const vendorSavings = vendors * vendorDaily;        // $/day avoided vendor cost
+        const egressSavings = egress;                       // $/day avoided egress/ETL
+        const dailyVeltraxCost = localDaily;                // $/day to operate locally
+
+        const dailySavings = Math.max(0, upliftValue + vendorSavings + egressSavings - dailyVeltraxCost);
+        const annualSavings = dailySavings * 365;
+        const paybackDays = dailySavings>0 ? Math.ceil(onetime / dailySavings) : Infinity;
+        const roiMultiple = dailySavings>0 ? (annualSavings / onetime) : 0;
+
+        $('#k-daily').textContent = money(dailySavings);
+        $('#k-annual').textContent = money(annualSavings);
+        $('#k-payback').textContent = (paybackDays===Infinity? '—' : `${paybackDays} days`);
+        $('#k-roi').textContent = (roiMultiple===0? '—' : `${roiMultiple.toFixed(1)}×`);
+
+        drawChart({vendorDaily, vendors, egress, localDaily, upliftValue, vendorSavings, egressSavings});
+      }
+
+      // Simple stacked bar chart (SVG)
+      function drawChart(m){
+        const svg = $('#chart');
+        while(svg.firstChild) svg.removeChild(svg.firstChild);
+        const W = 800, H = 260, P = 24; svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+        // Baseline (cloud) vs Veltrax cost and savings
+        const cloudCost = m.vendors * m.vendorDaily + m.egress;
+        const vxCost = m.localDaily;
+        const savings = m.upliftValue + m.vendorSavings + m.egressSavings;
+        const max = Math.max(cloudCost + 1, vxCost + savings);
+        const scale = x => (x / max) * (W - P*2);
+
+        // Bars
+        const y1 = 70, y2 = 170, bh = 34, r = 10;
+        // Cloud baseline cost (red)
+        rect(P, y1, scale(cloudCost), bh, 'var(--vx-danger)', 0.2, `Cloud baseline: ${money(cloudCost)}`);
+        // Veltrax cost (blue)
+        rect(P, y2, scale(vxCost), bh, 'var(--vx-primary)', 0.25, `Veltrax daily cost: ${money(vxCost)}`);
+        // Savings stacked (green) to the right of Veltrax bar
+        rect(P + scale(vxCost), y2, scale(m.savingsPart1 = m.upliftValue), bh, 'var(--vx-good)', 0.9, `Decision uplift: ${money(m.upliftValue)}`);
+        rect(P + scale(vxCost) + scale(m.upliftValue), y2, scale(m.vendorSavings), bh, 'var(--vx-good)', 0.75, `Vendor savings: ${money(m.vendorSavings)}`);
+        rect(P + scale(vxCost) + scale(m.upliftValue + m.vendorSavings), y2, scale(m.egressSavings), bh, 'var(--vx-good)', 0.6, `Egress/ETL savings: ${money(m.egressSavings)}`);
+
+        // Labels
+        label(P, y1-10, 'Cloud baseline cost'); label(P, y2-10, 'Veltrax cost + savings');
+        label(P + scale(cloudCost) + 6, y1 + bh/2 + 4, money(cloudCost));
+        label(P + scale(vxCost + savings) + 6, y2 + bh/2 + 4, money(vxCost + savings));
+
+        function rect(x,y,w,h,color,opacity, title){
+          const r = document.createElementNS('http://www.w3.org/2000/svg','rect');
+          r.setAttribute('x',x); r.setAttribute('y',y); r.setAttribute('width',Math.max(2,w)); r.setAttribute('height',h);
+          r.setAttribute('rx',8); r.setAttribute('fill',color); r.setAttribute('opacity',opacity); svg.appendChild(r);
+          if(title){ const t = document.createElementNS('http://www.w3.org/2000/svg','title'); t.textContent = title; r.appendChild(t);} }
+        function label(x,y,text){
+          const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+          t.setAttribute('x',x); t.setAttribute('y',y); t.setAttribute('fill','var(--vx-text)'); t.setAttribute('font-size','12'); t.textContent = text; svg.appendChild(t);
+        }
+      }
+
+      // Init with Finex
+      applyPreset('finex');
+      recalc();
+    </script>
+  </body>
+</html>

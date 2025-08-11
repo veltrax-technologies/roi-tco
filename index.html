@@ -45,7 +45,7 @@
       .kpi .label{font-size:13px;color:var(--vx-muted);margin-bottom:8px}
       .kpi .value{font-size:26px;font-weight:700}
       .stack{display:grid;gap:18px} /* Always stacked: Results below for readability */
-      .chart{height:320px;border:1px solid var(--vx-border);border-radius:14px;position:relative;background:#0f1219}
+      .chart{height:360px;border:1px solid var(--vx-border);border-radius:14px;position:relative;background:#0f1219}
       .legend{display:flex;gap:14px;position:absolute;bottom:14px;left:14px;font-size:13px;color:var(--vx-muted);flex-wrap:wrap}
       .dot{display:inline-block;width:12px;height:12px;border-radius:50%}
       .dot.c1{background:var(--vx-danger)}
@@ -126,7 +126,7 @@
           <div class="kpi"><div class="label">ROI multiple (annual / one‑time)</div><div id="k-roi" class="value mono">—</div></div>
         </div>
         <div class="chart" style="margin-top:16px">
-          <svg id="chart" width="100%" height="100%" viewBox="0 0 800 320" preserveAspectRatio="none"></svg>
+          <svg id="chart" role="img" aria-label="Cost comparison chart"></svg>
           <div class="legend">
             <span><i class="dot c1"></i> Cloud baseline cost</span>
             <span><i class="dot c2"></i> Veltrax cost</span>
@@ -222,36 +222,71 @@
       function drawChart(m){
         const svg = $('#chart');
         while(svg.firstChild) svg.removeChild(svg.firstChild);
-        const W = 800, H = 320, P = 28; svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
-        // Baseline (cloud) vs Veltrax cost and savings
+
+        // Responsive sizing based on container width
+        const parent = svg.parentElement;
+        const W = Math.max(560, Math.floor(parent.clientWidth || 800));
+        const H = 360; // taller for labels
+        const P = 48;  // generous padding to prevent clipping
+        svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
         const cloudCost = m.vendors * m.vendorDaily + m.egress;
         const vxCost = m.localDaily;
-        const savings = m.upliftValue + m.vendorSavings + m.egressSavings;
-        const max = Math.max(cloudCost + 1, vxCost + savings);
+        const parts = [
+          { label: 'Decision uplift', value: m.upliftValue },
+          { label: 'Vendor savings',  value: m.vendorSavings },
+          { label: 'Egress/ETL',      value: m.egressSavings }
+        ];
+        const savings = parts.reduce((a,b)=>a+b.value,0);
+        const max = Math.max(cloudCost, vxCost + savings) * 1.08; // 8% headroom
         const scale = x => (x / max) * (W - P*2);
 
-        // Bars
-        const y1 = 90, y2 = 210, bh = 36;
-        rect(P, y1, scale(cloudCost), bh, 'var(--vx-danger)', 0.22, `Cloud baseline: ${money(cloudCost)}`);
-        rect(P, y2, scale(vxCost), bh, 'var(--vx-primary)', 0.28, `Veltrax daily cost: ${money(vxCost)}`);
-        rect(P + scale(vxCost), y2, scale(m.upliftValue), bh, 'var(--vx-good)', 0.9, `Decision uplift: ${money(m.upliftValue)}`);
-        rect(P + scale(vxCost) + scale(m.upliftValue), y2, scale(m.vendorSavings), bh, 'var(--vx-good)', 0.75, `Vendor savings: ${money(m.vendorSavings)}`);
-        rect(P + scale(vxCost) + scale(m.upliftValue + m.vendorSavings), y2, scale(m.egressSavings), bh, 'var(--vx-good)', 0.6, `Egress/ETL savings: ${money(m.egressSavings)}`);
+        // Layout
+        const yCloud = 120, yVx = 250, bh = 34, r = 10;
 
-        // Labels
-        label(P, y1-12, 'Cloud baseline cost'); label(P, y2-12, 'Veltrax cost + savings');
-        label(P + scale(cloudCost) + 8, y1 + bh/2 + 5, money(cloudCost));
-        label(P + scale(vxCost + savings) + 8, y2 + bh/2 + 5, money(vxCost + savings));
+        // Drawing helpers
+        const NS = 'http://www.w3.org/2000/svg';
+        const bar = (x,y,w,color,opacity)=>{
+          const rect = document.createElementNS(NS,'rect');
+          rect.setAttribute('x',x); rect.setAttribute('y',y);
+          rect.setAttribute('width',Math.max(2,w)); rect.setAttribute('height',bh);
+          rect.setAttribute('rx',r); rect.setAttribute('fill',color);
+          rect.setAttribute('opacity',opacity); svg.appendChild(rect);
+        };
+        const textAt = (x,y,txt,anchor='start',size=13,fill='var(--vx-text)')=>{
+          const t = document.createElementNS(NS,'text');
+          t.setAttribute('x',x); t.setAttribute('y',y); t.setAttribute('fill',fill);
+          t.setAttribute('font-size',size); t.setAttribute('text-anchor',anchor);
+          t.textContent = txt; svg.appendChild(t);
+        };
+        const moneyAtEnd = (xEnd,y,val)=>{
+          // Draw value label anchored at the end of the bar so it never clips
+          textAt(xEnd - 8, y, (money(val)), 'end', 13, 'var(--vx-text)');
+        };
 
-        function rect(x,y,w,h,color,opacity, title){
-          const r = document.createElementNS('http://www.w3.org/2000/svg','rect');
-          r.setAttribute('x',x); r.setAttribute('y',y); r.setAttribute('width',Math.max(2,w)); r.setAttribute('height',h);
-          r.setAttribute('rx',10); r.setAttribute('fill',color); r.setAttribute('opacity',opacity); svg.appendChild(r);
-          if(title){ const t = document.createElementNS('http://www.w3.org/2000/svg','title'); t.textContent = title; r.appendChild(t);} }
-        function label(x,y,text){
-          const t = document.createElementNS('http://www.w3.org/2000/svg','text');
-          t.setAttribute('x',x); t.setAttribute('y',y); t.setAttribute('fill','var(--vx-text)'); t.setAttribute('font-size','13'); t.textContent = text; svg.appendChild(t);
-        }
+        // Bars & labels
+        // Cloud baseline
+        bar(P, yCloud, scale(cloudCost), 'var(--vx-danger)', 0.26);
+        textAt(P, yCloud - 12, 'Cloud baseline cost', 'start', 13, 'var(--vx-muted)');
+        moneyAtEnd(P + scale(cloudCost), yCloud + bh/2 + 5, cloudCost);
+
+        // Veltrax cost + stacked savings
+        bar(P, yVx, scale(vxCost), 'var(--vx-primary)', 0.35);
+        textAt(P, yVx - 12, 'Veltrax: cost + savings', 'start', 13, 'var(--vx-muted)');
+        moneyAtEnd(P + scale(vxCost), yVx + bh/2 + 5, vxCost);
+
+        let x = P + scale(vxCost);
+        parts.forEach((p,i)=>{
+          const w = Math.max(2, scale(p.value));
+          bar(x, yVx, w, 'var(--vx-good)', 0.78 - i*0.12);
+          // Label inside the segment if wide enough; otherwise outside right
+          const hasRoom = w > 110;
+          const lx = hasRoom ? (x + w - 8) : (x + w + 8);
+          const anchor = hasRoom ? 'end' : 'start';
+          textAt(lx, yVx + bh/2 + 5, p.label, anchor, 12, 'var(--vx-text)');
+          x += w;
+        });
+        moneyAtEnd(P + scale(vxCost + savings), yVx + bh/2 + 5, vxCost + savings);
       }
 
       // Init with Finex
